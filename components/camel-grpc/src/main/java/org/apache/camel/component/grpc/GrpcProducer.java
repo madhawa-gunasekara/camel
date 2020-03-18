@@ -16,6 +16,8 @@
  */
 package org.apache.camel.component.grpc;
 
+import java.util.Map;
+
 import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import io.grpc.CallCredentials;
@@ -31,6 +33,7 @@ import org.apache.camel.AsyncCallback;
 import org.apache.camel.Exchange;
 import org.apache.camel.component.grpc.auth.jwt.JwtCallCredentials;
 import org.apache.camel.component.grpc.auth.jwt.JwtHelper;
+import org.apache.camel.component.grpc.client.GrpcClientHeaderInterceptor;
 import org.apache.camel.component.grpc.client.GrpcExchangeForwarder;
 import org.apache.camel.component.grpc.client.GrpcExchangeForwarderFactory;
 import org.apache.camel.component.grpc.client.GrpcResponseAggregationStreamObserver;
@@ -42,6 +45,7 @@ import org.apache.camel.support.service.ServiceHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 /**
  * Represents asynchronous and synchronous gRPC producer implementations.
@@ -56,6 +60,7 @@ public class GrpcProducer extends DefaultAsyncProducer {
     private Object grpcStub;
     private GrpcExchangeForwarder forwarder;
     private StreamObserver<Object> globalResponseObserver;
+    private GrpcClientHeaderInterceptor clientHeaderInterceptor;
 
     public GrpcProducer(GrpcEndpoint endpoint, GrpcConfiguration configuration) {
         super(endpoint);
@@ -87,7 +92,21 @@ public class GrpcProducer extends DefaultAsyncProducer {
 
     @Override
     public void process(Exchange exchange) throws Exception {
-        forwarder.forward(exchange);
+        ThreadLocal threadLocalExchange = null;
+        try {
+            threadLocalExchange = new ThreadLocal<Exchange>() {
+                @Override
+                protected Exchange initialValue() {
+                    return exchange;
+                }
+            };
+            clientHeaderInterceptor.setThreadLocalExchange(threadLocalExchange);
+            forwarder.forward(exchange);
+        } finally {
+            if (threadLocalExchange != null) {
+                threadLocalExchange.remove();
+            }
+        }
     }
 
     @Override
@@ -174,8 +193,8 @@ public class GrpcProducer extends DefaultAsyncProducer {
             
             channelBuilder = channelBuilder.sslContext(sslContextBuilder.build());
         }
-         
-        channel = channelBuilder.negotiationType(configuration.getNegotiationType())
+        clientHeaderInterceptor = new GrpcClientHeaderInterceptor();
+        channel = channelBuilder.intercept(clientHeaderInterceptor).negotiationType(configuration.getNegotiationType())
                                 .flowControlWindow(configuration.getFlowControlWindow())
                                 .userAgent(configuration.getUserAgent())
                                 .maxInboundMessageSize(configuration.getMaxMessageSize())
