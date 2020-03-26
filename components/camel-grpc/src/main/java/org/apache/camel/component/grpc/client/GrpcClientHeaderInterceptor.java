@@ -53,11 +53,13 @@ public class GrpcClientHeaderInterceptor implements ClientInterceptor {
             @Override
             public void start(Listener<RespT> responseListener, Metadata headers) {
                 /* put custom header */
-                Map<String, Object> headersMap = ((Exchange) threadLocalExchange.get()).getIn().getHeaders();
-                for (String key : headersMap.keySet()) {
-                    String header = (String) headersMap.get(key);
-                    Metadata.Key<String> headerKey = Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
-                    headers.put(headerKey, header);
+                if(threadLocalExchange.get() != null) {
+                    Map<String, Object> headersMap = ((Exchange) threadLocalExchange.get()).getIn().getHeaders();
+                    for (String key : headersMap.keySet()) {
+                        String header = (String) headersMap.get(key);
+                        Metadata.Key<String> headerKey = Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
+                        headers.put(headerKey, header);
+                    }
                 }
                 LOG.debug("Request Headers :: " + headers);
                 super.start(new ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT>(responseListener) {

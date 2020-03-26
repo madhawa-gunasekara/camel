@@ -92,20 +92,17 @@ public class GrpcProducer extends DefaultAsyncProducer {
 
     @Override
     public void process(Exchange exchange) throws Exception {
-        ThreadLocal threadLocalExchange = null;
+        ThreadLocal threadLocalExchange  = new ThreadLocal<Exchange>() {
+            @Override
+            protected Exchange initialValue() {
+                return exchange;
+            }
+        };
         try {
-            threadLocalExchange = new ThreadLocal<Exchange>() {
-                @Override
-                protected Exchange initialValue() {
-                    return exchange;
-                }
-            };
             clientHeaderInterceptor.setThreadLocalExchange(threadLocalExchange);
             forwarder.forward(exchange);
         } finally {
-            if (threadLocalExchange != null) {
-                threadLocalExchange.remove();
-            }
+            threadLocalExchange.remove();
         }
     }
 
